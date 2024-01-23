@@ -33,7 +33,6 @@ fastify.get('/', async (req, res) => {
     </body>
   </html>
 `
-
   res.send(html)
 })
 
