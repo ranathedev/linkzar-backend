@@ -23,8 +23,10 @@ const client = new MongoClient(uri, {
   useUnifiedTopology: true,
 })
 
+app.use(fastify.static(path.join(__dirname, 'public')))
+
 fastify.get('/', async (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'))
+  res.sendFile(path.join(__dirname, 'public', 'index.html'))
 })
 
 fastify.post('/api/getLinks', async (req, res) => {
