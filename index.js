@@ -23,17 +23,7 @@ const client = new MongoClient(uri, {
 })
 
 fastify.get('/', async (req, res) => {
-  const html = `
-  <html>
-    <head>
-      <meta http-equiv="refresh" content="2;url=https://your-frontend-url.com">
-    </head>
-    <body>
-      <p>Redirecting to frontend...</p>
-    </body>
-  </html>
-`
-  res.send(html)
+  res.send('Redirecting to the frontend...').redirect('https://linkzar.web.app')
 })
 
 fastify.post('/api/getLinks', async (req, res) => {
