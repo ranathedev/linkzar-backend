@@ -1,4 +1,5 @@
 const { MongoClient } = require('mongodb')
+const path = require('path')
 require('dotenv').config()
 const {
   createCollection,
@@ -23,7 +24,7 @@ const client = new MongoClient(uri, {
 })
 
 fastify.get('/', async (req, res) => {
-  res.send('Redirecting to the frontend...').redirect('https://linkzar.web.app')
+  res.sendFile(path.join(__dirname, 'index.html'))
 })
 
 fastify.post('/api/getLinks', async (req, res) => {
