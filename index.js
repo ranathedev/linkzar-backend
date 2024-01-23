@@ -15,7 +15,10 @@ const fastify = require('fastify')({
   logger: false,
 })
 
-fastify.register(require('@fastify/cors'), {})
+fastify.register(require('@fastify/cors'), require('fastify-static'), {
+  root: path.join(__dirname, 'public'),
+  prefix: '/public/',
+})
 
 const uri = process.env.MONGO_URI
 const client = new MongoClient(uri, {
@@ -23,10 +26,8 @@ const client = new MongoClient(uri, {
   useUnifiedTopology: true,
 })
 
-app.use(fastify.static(path.join(__dirname, 'public')))
-
 fastify.get('/', async (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'))
+  res.sendFile('index.html')
 })
 
 fastify.post('/api/getLinks', async (req, res) => {
