@@ -6,17 +6,16 @@
     "node": "18.x"
   },
   "scripts": {
-    "start": "node index.js",
-    "deploy": "fly deploy"
+    "start": "nodemon index.js"
   },
   "dependencies": {
     "@fastify/cors": "^8.3.0",
     "dotenv": "^16.3.1",
     "fastify": "^4.20.0",
-    "mongodb": "^5.7.0"
+    "mongodb": "^5.7.0",
+    "nodemon": "^3.0.3"
   },
   "devDependencies": {
-    "@flydotio/dockerfile": "^0.4.8",
-    "nodemon": "^3.0.3"
+    "@flydotio/dockerfile": "^0.4.8"
   }
 }

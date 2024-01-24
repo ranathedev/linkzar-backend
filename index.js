@@ -1,5 +1,4 @@
 const { MongoClient } = require('mongodb')
-const path = require('path')
 require('dotenv').config()
 const {
   createCollection,
@@ -15,19 +14,15 @@ const fastify = require('fastify')({
   logger: false,
 })
 
-fastify.register(require('@fastify/cors'), require('fastify-static'), {
-  root: path.join(__dirname, 'public'),
-  prefix: '/public/',
-})
+fastify.register(require('@fastify/cors'), {})
 
 const uri = process.env.MONGO_URI
-const client = new MongoClient(uri, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+const client = new MongoClient(uri)
 
 fastify.get('/', async (req, res) => {
-  res.sendFile('index.html')
+  res.send(
+    'Linkzar Backend is working fine. Go to Frontend : https://linkzar.web.app'
+  )
 })
 
 fastify.post('/api/getLinks', async (req, res) => {
