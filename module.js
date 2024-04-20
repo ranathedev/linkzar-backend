@@ -3,14 +3,14 @@ const { ObjectId } = require('mongodb')
 const createCollection = async (client, uid, res) => {
   try {
     await client.connect()
-    const database = client.db('linkzar')
+    const database = await client.db('linkzar')
 
     await database.createCollection(uid)
 
     res.send({ message: 'User collection created.' }).status(200)
-    // console.log("Collection created.");
+    console.log('Collection created.')
   } catch (error) {
-    // console.error('Error creating user collection:', error)
+    console.error('Error creating user collection:', error)
     res.send({ error: 'Internal Server Error' }).status(500)
   } finally {
     await client.close()
@@ -20,14 +20,14 @@ const createCollection = async (client, uid, res) => {
 const deleteCollection = async (client, uid, res) => {
   try {
     await client.connect()
-    const database = client.db('linkzar')
+    const database = await client.db('linkzar')
 
     await database.dropCollection(uid)
 
     res.send({ message: 'User collection deleted.' }).status(200)
-    // console.log('Collection Deleted.')
+    console.log('Collection Deleted.')
   } catch (error) {
-    // console.error('Error deleting user collection:', error)
+    console.error('Error deleting user collection:', error)
     res.send({ error: 'Internal Server Error' }).status(500)
   } finally {
     await client.close()
@@ -37,10 +37,10 @@ const deleteCollection = async (client, uid, res) => {
 const getLinks = async (client, uid) => {
   try {
     await client.connect()
-    const database = client.db('linkzar')
-    const collection = database.collection(uid)
+    const database = await client.db('linkzar')
+    const collection = await database.collection(uid)
 
-    const cursor = collection.find()
+    const cursor = await collection.find()
     const allDocuments = await cursor.toArray()
 
     console.log('Links found')
@@ -50,22 +50,26 @@ const getLinks = async (client, uid) => {
   }
 }
 
-const insertDocuments = async (client, uid, demoLinks, res) => {
+const insertDocuments = async (client, uid, demoLinks) => {
   try {
     await client.connect()
-    const db = client.db('linkzar')
-    const collection = db.collection(uid)
+    const db = await client.db('linkzar')
+    const collection = await db.collection(uid)
 
-    const modifiedArray = demoLinks.map(obj => {
-      return { ...obj, _id: new ObjectId(obj._id) }
-    })
+    const modifiedArray = demoLinks.map(obj => ({
+      ...obj,
+      _id: new ObjectId(obj._id),
+    }))
 
     const result = await collection.insertMany(modifiedArray)
-    res.send('Demo Links added to Database')
-    // console.log(`${result.insertedCount} documents inserted.`)
+
+    if (result.insertedCount === modifiedArray.length) {
+      console.log(`${result.insertedCount} documents inserted.`)
+      return 'Demo Links added to Database'
+    }
   } catch (error) {
-    res.status(500).send('Internal Error')
-    // console.error('Error inserting documents:', error)
+    console.log('Error inserting documents:', error)
+    return 'Internal Error'
   } finally {
     await client.close()
   }
@@ -74,14 +78,14 @@ const insertDocuments = async (client, uid, demoLinks, res) => {
 const insertDataObject = async (client, dataObject, uid) => {
   try {
     await client.connect()
-    const database = client.db('linkzar')
-    const collection = database.collection(uid)
+    const database = await client.db('linkzar')
+    const collection = await database.collection(uid)
 
-    const userCollections = database.listCollections()
+    const userCollections = await database.listCollections()
 
     while (await userCollections.hasNext()) {
       const collectionInfo = await userCollections.next()
-      const userCollection = database.collection(collectionInfo.name)
+      const userCollection = await database.collection(collectionInfo.name)
 
       const urlData = await userCollection.findOne({
         originalURL: dataObject.originalURL,
@@ -92,10 +96,10 @@ const insertDataObject = async (client, dataObject, uid) => {
       })
 
       if (urlData) {
-        // console.log('Link is already shortened')
+        console.log('Link is already shortened')
         return { err: 'This link is already shortened.' }
       } else if (shortLink) {
-        // console.log('Alias is taken')
+        console.log('Alias is taken')
         return { err: 'This alias is already taken.' }
       }
     }
@@ -109,10 +113,10 @@ const insertDataObject = async (client, dataObject, uid) => {
     const filter = { _id: new ObjectId(docId) }
     const document = await collection.findOne(filter)
 
-    // console.log('New Link added')
+    console.log('New Link added')
     return { document, count: 1 }
   } catch (error) {
-    // console.error('Error inserting data object:', error)
+    console.log('Error inserting data object:', error)
     return false
   } finally {
     await client.close()
@@ -122,21 +126,47 @@ const insertDataObject = async (client, dataObject, uid) => {
 const deleteLink = async (client, id, uid) => {
   try {
     await client.connect()
-    const database = client.db('linkzar')
-    const collection = database.collection(uid)
+    const database = await client.db('linkzar')
+    const collection = await database.collection(uid)
 
     const filter = { _id: new ObjectId(id) }
     const deleteResult = await collection.deleteOne(filter)
 
     if (deleteResult.deletedCount === 1) {
-      // console.log('Link deleted')
+      console.log('Link deleted')
       return true
     } else {
-      // console.log("Can't delete Link")
+      console.log("Can't delete Link")
       return { err: "Error: Can't delete link." }
     }
   } catch (error) {
-    // console.log('Error deleting link:', error)
+    console.log('Error deleting link:', error)
+  } finally {
+    client.close()
+  }
+}
+
+const deleteDemoLinks = async (client, demoLinks, res) => {
+  try {
+    await client.connect()
+    const database = await client.db('linkzar')
+    const collection = await database.collection('links')
+
+    let deletedCount = 0
+
+    for (let i = 0; i < demoLinks.length; i++) {
+      const shortId = demoLinks[i].shortId
+      const result = await collection.deleteOne({ shortId })
+      if (result.deletedCount === 1) deletedCount += result.deletedCount
+    }
+
+    console.log(
+      `${deletedCount} docs deleted from Main Collection successfully.`
+    )
+    res.status(200)
+  } catch (error) {
+    console.log('Error deleting link:', error)
+    res.status(500)
   } finally {
     client.close()
   }
@@ -145,15 +175,15 @@ const deleteLink = async (client, id, uid) => {
 const editLink = async (client, id, newValue, uid) => {
   try {
     await client.connect()
-    const database = client.db('linkzar')
-    const collection = database.collection(uid)
+    const database = await client.db('linkzar')
+    const collection = await database.collection(uid)
 
     const filter = { _id: new ObjectId(id) }
 
     const prevDoc = await collection.findOne(filter)
 
     if (prevDoc.shortId == newValue) {
-      // console.log('Prev value is same')
+      console.log('Prev value is same')
       return prevDoc
     } else {
       const shortLink = await collection.findOne({
@@ -161,7 +191,7 @@ const editLink = async (client, id, newValue, uid) => {
       })
 
       if (shortLink) {
-        // console.log('Alias is taken')
+        console.log('Alias is taken')
         return { error: 'Error: Alias is already taken.' }
       } else {
         const updateOperation = {
@@ -178,17 +208,17 @@ const editLink = async (client, id, newValue, uid) => {
           })
 
           if (updatedDoc) {
-            // console.log('Link edited')
+            console.log('Link edited')
             return updatedDoc
           }
         } else {
-          // console.log("Can't edit Link")
+          console.log("Can't edit Link")
           return { err: "Error: Can't update the Link." }
         }
       }
     }
   } catch (error) {
-    // console.error('An error occurred:', error)
+    console.error('An error occurred:', error)
   } finally {
     await client.close()
   }
@@ -201,5 +231,6 @@ module.exports = {
   insertDocuments,
   insertDataObject,
   deleteLink,
+  deleteDemoLinks,
   editLink,
 }
