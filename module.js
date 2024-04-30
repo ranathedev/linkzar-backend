@@ -1,231 +1,162 @@
-const { ObjectId } = require('mongodb')
+const { ObjectId } = require('bson')
 
-const createCollection = async (client, uid, res) => {
+const deleteCollection = async (db, uid, res) => {
   try {
-    await client.connect()
-    const database = await client.db('linkzar')
+    const collectionRef = db.collection(uid)
+    const querySnapshot = await collectionRef.get()
 
-    await database.createCollection(uid)
-
-    res.send({ message: 'User collection created.' }).status(200)
-    console.log('Collection created.')
-  } catch (error) {
-    console.error('Error creating user collection:', error)
-    res.send({ error: 'Internal Server Error' }).status(500)
-  } finally {
-    await client.close()
-  }
-}
-
-const deleteCollection = async (client, uid, res) => {
-  try {
-    await client.connect()
-    const database = await client.db('linkzar')
-
-    await database.dropCollection(uid)
-
-    res.send({ message: 'User collection deleted.' }).status(200)
+    const batch = db.batch()
+    querySnapshot.forEach(doc => {
+      batch.delete(doc.ref)
+    })
+    await batch.commit()
     console.log('Collection Deleted.')
+    res.send({ message: 'User collection deleted.' }).status(200)
   } catch (error) {
     console.error('Error deleting user collection:', error)
     res.send({ error: 'Internal Server Error' }).status(500)
-  } finally {
-    await client.close()
   }
 }
 
-const getLinks = async (client, uid) => {
+const getLinks = async (db, uid) => {
   try {
-    await client.connect()
-    const database = await client.db('linkzar')
-    const collection = await database.collection(uid)
+    const querySnapshot = await db.collection(uid).get()
 
-    const cursor = await collection.find()
-    const allDocuments = await cursor.toArray()
-
-    console.log('Links found')
-    return allDocuments
+    if (!querySnapshot.empty) {
+      const allDocuments = querySnapshot.docs.map(doc => doc.data())
+      console.log('Links found')
+      return allDocuments
+    } else return { err: 'Links not found.' }
   } catch (error) {
     return { err: error }
   }
 }
 
-const insertDocuments = async (client, uid, demoLinks) => {
+const insertDocuments = async (db, uid, demoLinks) => {
   try {
-    await client.connect()
-    const db = await client.db('linkzar')
-    const collection = await db.collection(uid)
+    const collectionRef = db.collection(uid)
 
-    const modifiedArray = demoLinks.map(obj => ({
-      ...obj,
-      _id: new ObjectId(obj._id),
-    }))
-
-    const result = await collection.insertMany(modifiedArray)
-
-    if (result.insertedCount === modifiedArray.length) {
-      console.log(`${result.insertedCount} documents inserted.`)
-      return 'Demo Links added to Database'
+    const batch = db.batch()
+    for (const item of demoLinks) {
+      const docRef = collectionRef.doc(item.id)
+      batch.set(docRef, item)
     }
+    await batch.commit()
+
+    console.log(`${result.insertedCount} documents inserted.`)
+    return 'Demo Links added to Database'
   } catch (error) {
     console.log('Error inserting documents:', error)
     return 'Internal Error'
-  } finally {
-    await client.close()
   }
 }
 
-const insertDataObject = async (client, dataObject, uid) => {
+const insertDataObject = async (db, dataObject, uid) => {
   try {
-    await client.connect()
-    const database = await client.db('linkzar')
-    const collection = await database.collection(uid)
+    const allCollections = []
+    const collectionsRef = await db.listCollections()
+    collectionsRef.forEach(collection => {
+      allCollections.push(collection)
+    })
 
-    const userCollections = await database.listCollections()
-
-    while (await userCollections.hasNext()) {
-      const collectionInfo = await userCollections.next()
-      const userCollection = await database.collection(collectionInfo.name)
-
-      const urlData = await userCollection.findOne({
-        originalURL: dataObject.originalURL,
-      })
-
-      const shortLink = await userCollection.findOne({
-        shortId: dataObject.shortId,
-      })
-
-      if (urlData) {
-        console.log('Link is already shortened')
-        return { err: 'This link is already shortened.' }
-      } else if (shortLink) {
+    for (const collectionRef of allCollections) {
+      const querySnapshot = await collectionRef
+        .where('shortId', '==', dataObject.shortId)
+        .get()
+      if (!querySnapshot.empty) {
         console.log('Alias is taken')
         return { err: 'This alias is already taken.' }
       }
     }
 
-    dataObject.clickCounts = 0
-    dataObject.createdDate = new Date()
+    const docId = generateId()
 
-    const addedDoc = await collection.insertOne(dataObject)
-    const docId = addedDoc.insertedId
+    const data = {
+      ...dataObject,
+      id: docId,
+      clickCounts: 0,
+      createdDate: new Date(),
+    }
 
-    const filter = { _id: new ObjectId(docId) }
-    const document = await collection.findOne(filter)
+    await db.collection(uid).doc(docId).set(data)
 
-    console.log('New Link added')
-    return { document, count: 1 }
+    return { document: data, count: 1 }
   } catch (error) {
     console.log('Error inserting data object:', error)
     return false
-  } finally {
-    await client.close()
   }
 }
 
-const deleteLink = async (client, id, uid) => {
+const deleteLink = async (db, id, uid) => {
   try {
-    await client.connect()
-    const database = await client.db('linkzar')
-    const collection = await database.collection(uid)
-
-    const filter = { _id: new ObjectId(id) }
-    const deleteResult = await collection.deleteOne(filter)
-
-    if (deleteResult.deletedCount === 1) {
-      console.log('Link deleted')
-      return true
-    } else {
-      console.log("Can't delete Link")
-      return { err: "Error: Can't delete link." }
-    }
+    await db.collection(uid).doc(id).delete()
+    console.log('Link deleted')
+    return true
   } catch (error) {
     console.log('Error deleting link:', error)
-  } finally {
-    client.close()
+    return { err: "Error: Can't delete link." }
   }
 }
 
-const deleteDemoLinks = async (client, demoLinks, res) => {
+const deleteDemoLinks = async (db, demoLinks, res) => {
   try {
-    await client.connect()
-    const database = await client.db('linkzar')
-    const collection = await database.collection('links')
-
-    let deletedCount = 0
-
-    for (let i = 0; i < demoLinks.length; i++) {
-      const shortId = demoLinks[i].shortId
-      const result = await collection.deleteOne({ shortId })
-      if (result.deletedCount === 1) deletedCount += result.deletedCount
+    const collectionRef = db.collection('links')
+    const batch = db.batch()
+    for (const item of demoLinks) {
+      const docRef = collectionRef.doc(item.id)
+      batch.delete(docRef)
     }
-
-    console.log(
-      `${deletedCount} docs deleted from Main Collection successfully.`
-    )
-    res.status(200)
+    await batch.commit()
+    res.status(200).send()
   } catch (error) {
     console.log('Error deleting link:', error)
-    res.status(500)
-  } finally {
-    client.close()
+    res.status(500).send()
   }
 }
 
-const editLink = async (client, id, newValue, uid) => {
+const editLink = async (db, id, newValue, uid) => {
   try {
-    await client.connect()
-    const database = await client.db('linkzar')
-    const collection = await database.collection(uid)
+    const collectionRef = db.collection(uid)
+    const querySnapshot = await collectionRef.where('id', '==', id).get()
 
-    const filter = { _id: new ObjectId(id) }
+    if (querySnapshot.empty) {
+      return { err: 'No link found with the given id.' }
+    }
 
-    const prevDoc = await collection.findOne(filter)
-
+    const prevDoc = querySnapshot.docs[0].data()
     if (prevDoc.shortId == newValue) {
       console.log('Prev value is same')
       return prevDoc
-    } else {
-      const shortLink = await collection.findOne({
-        shortId: newValue,
-      })
+    }
 
-      if (shortLink) {
+    const allCollections = []
+    const collectionsRef = await db.listCollections()
+    collectionsRef.forEach(collection => {
+      allCollections.push(collection)
+    })
+
+    for (const collectionRef of allCollections) {
+      const querySnapshot = await collectionRef
+        .where('shortId', '==', newValue)
+        .get()
+      if (!querySnapshot.empty) {
         console.log('Alias is taken')
-        return { error: 'Error: Alias is already taken.' }
-      } else {
-        const updateOperation = {
-          $set: {
-            shortId: newValue,
-          },
-        }
-
-        const updateResult = await collection.updateOne(filter, updateOperation)
-
-        if (updateResult.modifiedCount === 1) {
-          const updatedDoc = await collection.findOne({
-            _id: new ObjectId(id),
-          })
-
-          if (updatedDoc) {
-            console.log('Link edited')
-            return updatedDoc
-          }
-        } else {
-          console.log("Can't edit Link")
-          return { err: "Error: Can't update the Link." }
-        }
+        return { err: 'Error: Alias is already taken.' }
       }
     }
+
+    const updatedData = { ...prevDoc, shortId: newValue }
+    await collectionRef.doc(id).update(updatedData)
+    return updatedData
   } catch (error) {
     console.error('An error occurred:', error)
-  } finally {
-    await client.close()
+    return { err: "Error: Can't update the Link." }
   }
 }
 
+const generateId = () => new ObjectId().toHexString()
+
 module.exports = {
-  createCollection,
   deleteCollection,
   getLinks,
   insertDocuments,

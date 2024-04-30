@@ -1,8 +1,8 @@
-const { MongoClient } = require('mongodb')
+const admin = require('firebase-admin')
+const Firestore = require('firebase-admin/firestore')
 const fs = require('fs')
 require('dotenv').config()
 const {
-  createCollection,
   deleteCollection,
   getLinks,
   insertDocuments,
@@ -12,14 +12,17 @@ const {
   editLink,
 } = require('./module.js')
 
+const serviceAccount = require('./urlzar-firebase-adminsdk.json')
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+})
+const db = admin.firestore()
+
 const fastify = require('fastify')({
   logger: false,
 })
 
 fastify.register(require('@fastify/cors'), {})
-
-const uri = process.env.MONGO_URI
-const client = new MongoClient(uri)
 
 fastify.get('/', async (req, res) => {
   try {
@@ -39,23 +42,18 @@ fastify.get('/', async (req, res) => {
 
 fastify.post('/api/getLinks', async (req, res) => {
   const uid = req.body.uid
-  const response = await getLinks(client, uid)
+  const response = await getLinks(db, uid)
   res.send(response)
-})
-
-fastify.post('/api/createColl', async (req, res) => {
-  const uid = req.body.uid
-  await createCollection(client, uid, res)
 })
 
 fastify.post('/api/deleteColl', async (req, res) => {
   const uid = req.body.uid
-  await deleteCollection(client, uid, res)
+  await deleteCollection(db, uid, res)
 })
 
 fastify.post('/api/demoLinks', async (req, res) => {
   const { uid, demoLinks } = req.body
-  const response = await insertDocuments(client, uid, demoLinks)
+  const response = await insertDocuments(db, uid, demoLinks)
 
   if (response === 'Demo Links added to Database')
     res.send(response).status(200)
@@ -65,25 +63,25 @@ fastify.post('/api/demoLinks', async (req, res) => {
 fastify.post('/api/delDemoLinksFromMain', async (req, res) => {
   const demoLinks = req.body
   console.log(demoLinks, 'demoLinks to delete from Main Collection')
-  await deleteDemoLinks(client, demoLinks, res)
+  await deleteDemoLinks(db, demoLinks, res)
 })
 
 fastify.post('/api/shorten', async (req, res) => {
   const { uid, url, shortId } = req.body
   const dataObject = { shortId, originalURL: url }
-  const response = await insertDataObject(client, dataObject, uid)
+  const response = await insertDataObject(db, dataObject, uid)
   response ? res.send(response) : res.send({ err: 'Unexpected error occured' })
 })
 
 fastify.post('/api/deleteLink', async (req, res) => {
   const { uid, id } = req.body
-  const response = await deleteLink(client, id, uid)
+  const response = await deleteLink(db, id, uid)
   res.send(response)
 })
 
 fastify.post('/api/editLink', async (req, res) => {
-  const { uid, documentId, newValue } = req.body
-  const response = await editLink(client, documentId, newValue, uid)
+  const { uid, id, value } = req.body
+  const response = await editLink(db, id, value, uid)
   res.send(response)
 })
 
@@ -91,25 +89,22 @@ fastify.get('/:shortId', async (req, res) => {
   const shortId = req.params.shortId
 
   try {
-    await client.connect()
-    const database = client.db('linkzar')
-    const userCollections = database.listCollections()
+    const allCollections = []
+    const collectionsRef = await db.listCollections()
+    collectionsRef.forEach(collection => {
+      allCollections.push(collection)
+    })
 
-    while (await userCollections.hasNext()) {
-      const collectionInfo = await userCollections.next()
-      const userCollection = database.collection(collectionInfo.name)
-
-      const urlData = await userCollection.findOne({ shortId })
-
-      if (urlData) {
-        await userCollection.updateOne(
-          { _id: urlData._id },
-          { $inc: { clickCounts: 1 } }
-        )
-
-        const originalURL = urlData.originalURL
-        res.redirect(originalURL)
-        return
+    for (const collectionRef of allCollections) {
+      const querySnapshot = await collectionRef
+        .where('shortId', '==', shortId)
+        .get()
+      if (!querySnapshot.empty) {
+        const docRef = querySnapshot.docs[0].ref
+        const data = querySnapshot.docs[0].data()
+        await docRef.update({ clickCounts: Firestore.FieldValue.increment(1) })
+        res.redirect(data.originalURL)
+        break
       }
     }
 
