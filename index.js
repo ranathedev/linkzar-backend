@@ -12,7 +12,7 @@ const {
   editLink,
 } = require('./module.js')
 
-const serviceAccount = require('./urlzar-firebase-adminsdk.json')
+const serviceAccount = require('./public/urlzar-firebase-adminsdk.json')
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 })
