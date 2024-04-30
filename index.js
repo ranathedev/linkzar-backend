@@ -122,7 +122,7 @@ fastify.get('/:shortId', async (req, res) => {
   }
 })
 
-fastify.listen({ port: 3001, host: '0.0.0.0' }, function (err, address) {
+fastify.listen({ port: 3000, host: '0.0.0.0' }, function (err, address) {
   if (err) {
     console.error(err)
     process.exit(1)
