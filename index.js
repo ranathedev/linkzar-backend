@@ -81,7 +81,7 @@ fastify.post('/api/deleteLink', async (req, res) => {
 
 fastify.post('/api/editLink', async (req, res) => {
   const { uid, id, value } = req.body
-  const response = await editLink(db, id, value, uid)
+  const response = await editLink(client, id, value, uid)
   res.send(response)
 })
 

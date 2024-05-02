@@ -127,21 +127,46 @@ const editLink = async (db, id, newValue, uid) => {
     if (prevDoc.shortId == newValue) {
       console.log('Prev value is same')
       return prevDoc
-    }
+    } else {
+      const userCollections = database.listCollections()
 
-    const allCollections = []
-    const collectionsRef = await db.listCollections()
-    collectionsRef.forEach(collection => {
-      allCollections.push(collection)
-    })
+      while (await userCollections.hasNext()) {
+        const collectionInfo = await userCollections.next()
+        const userCollection = database.collection(collectionInfo.name)
 
-    for (const collectionRef of allCollections) {
-      const querySnapshot = await collectionRef
-        .where('shortId', '==', newValue)
-        .get()
-      if (!querySnapshot.empty) {
-        console.log('Alias is taken')
-        return { err: 'Error: Alias is already taken.' }
+        const shortLink = await userCollection.findOne({
+          shortId: newValue,
+        })
+
+        if (shortLink) {
+          console.log('Alias is taken')
+          return { error: 'Error: Alias is already taken.' }
+        } else {
+          const updateOperation = {
+            $set: {
+              shortId: newValue,
+            },
+          }
+
+          const updateResult = await collection.updateOne(
+            filter,
+            updateOperation
+          )
+
+          if (updateResult.modifiedCount === 1) {
+            const updatedDoc = await collection.findOne({
+              _id: new ObjectId(id),
+            })
+
+            if (updatedDoc) {
+              console.log('Link edited')
+              return updatedDoc
+            }
+          } else {
+            console.log("Can't edit Link")
+            return { err: "Error: Can't update the Link." }
+          }
+        }
       }
     }
 
