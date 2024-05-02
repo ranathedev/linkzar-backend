@@ -10,10 +10,9 @@
   },
   "dependencies": {
     "@fastify/cors": "^8.3.0",
-    "bson": "^6.6.0",
     "dotenv": "^16.3.1",
     "fastify": "^4.20.0",
-    "firebase-admin": "^12.1.0",
+    "mongodb": "^5.7.0",
     "nodemon": "^3.0.3"
   },
   "devDependencies": {

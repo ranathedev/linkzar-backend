@@ -1,8 +1,8 @@
-const admin = require('firebase-admin')
-const Firestore = require('firebase-admin/firestore')
+const { MongoClient } = require('mongodb')
 const fs = require('fs')
 require('dotenv').config()
 const {
+  createCollection,
   deleteCollection,
   getLinks,
   insertDocuments,
@@ -12,17 +12,14 @@ const {
   editLink,
 } = require('./module.js')
 
-const serviceAccount = require('./urlzar-firebase-adminsdk.json')
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-})
-const db = admin.firestore()
-
 const fastify = require('fastify')({
   logger: false,
 })
 
 fastify.register(require('@fastify/cors'), {})
+
+const uri = process.env.MONGO_URI
+const client = new MongoClient(uri)
 
 fastify.get('/', async (req, res) => {
   try {
@@ -30,9 +27,7 @@ fastify.get('/', async (req, res) => {
       './public/index.html',
       'utf8'
     )
-
     res.header('Content-Type', 'text/html')
-
     res.send(htmlContent)
   } catch (err) {
     console.error(err)
@@ -42,72 +37,72 @@ fastify.get('/', async (req, res) => {
 
 fastify.post('/api/getLinks', async (req, res) => {
   const uid = req.body.uid
-  const response = await getLinks(db, uid)
+  const response = await getLinks(client, uid)
   res.send(response)
+})
+
+fastify.post('/api/createColl', async (req, res) => {
+  const uid = req.body.uid
+  await createCollection(client, uid, res)
 })
 
 fastify.post('/api/deleteColl', async (req, res) => {
   const uid = req.body.uid
-  await deleteCollection(db, uid, res)
+  await deleteCollection(client, uid, res)
 })
 
 fastify.post('/api/demoLinks', async (req, res) => {
   const { uid, demoLinks } = req.body
-  const response = await insertDocuments(db, uid, demoLinks)
-
-  if (response === 'Demo Links added to Database')
-    res.send(response).status(200)
-  else res.send(response).status(500)
+  // const response = await insertDocuments(client, uid, demoLinks)
+  if (response === 'Demo Links added to Database') res.send('OK').status(200)
+  // else res.send(response).status(500)
 })
 
 fastify.post('/api/delDemoLinksFromMain', async (req, res) => {
   const demoLinks = req.body
   console.log(demoLinks, 'demoLinks to delete from Main Collection')
-  await deleteDemoLinks(db, demoLinks, res)
+  await deleteDemoLinks(client, demoLinks, res)
 })
 
 fastify.post('/api/shorten', async (req, res) => {
   const { uid, url, shortId } = req.body
   const dataObject = { shortId, originalURL: url }
-  const response = await insertDataObject(db, dataObject, uid)
+  const response = await insertDataObject(client, dataObject, uid)
   response ? res.send(response) : res.send({ err: 'Unexpected error occured' })
 })
 
 fastify.post('/api/deleteLink', async (req, res) => {
   const { uid, id } = req.body
-  const response = await deleteLink(db, id, uid)
+  const response = await deleteLink(client, id, uid)
   res.send(response)
 })
 
 fastify.post('/api/editLink', async (req, res) => {
   const { uid, id, value } = req.body
-  const response = await editLink(db, id, value, uid)
+  const response = await editLink(client, id, value, uid)
   res.send(response)
 })
 
 fastify.get('/:shortId', async (req, res) => {
   const shortId = req.params.shortId
-
   try {
-    const allCollections = []
-    const collectionsRef = await db.listCollections()
-    collectionsRef.forEach(collection => {
-      allCollections.push(collection)
-    })
-
-    for (const collectionRef of allCollections) {
-      const querySnapshot = await collectionRef
-        .where('shortId', '==', shortId)
-        .get()
-      if (!querySnapshot.empty) {
-        const docRef = querySnapshot.docs[0].ref
-        const data = querySnapshot.docs[0].data()
-        await docRef.update({ clickCounts: Firestore.FieldValue.increment(1) })
-        res.redirect(data.originalURL)
-        break
+    await client.connect()
+    const database = client.db('linkzar')
+    const userCollections = database.listCollections()
+    while (await userCollections.hasNext()) {
+      const collectionInfo = await userCollections.next()
+      const userCollection = database.collection(collectionInfo.name)
+      const urlData = await userCollection.findOne({ shortId })
+      if (urlData) {
+        await userCollection.updateOne(
+          { _id: urlData._id },
+          { $inc: { clickCounts: 1 } }
+        )
+        const originalURL = urlData.originalURL
+        res.redirect(originalURL)
+        return
       }
     }
-
     res.status(404).send('URL Data not found')
   } catch (error) {
     console.error('Error retrieving URL:', error)
