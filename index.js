@@ -53,9 +53,10 @@ fastify.post('/api/deleteColl', async (req, res) => {
 
 fastify.post('/api/demoLinks', async (req, res) => {
   const { uid, demoLinks } = req.body
-  // const response = await insertDocuments(client, uid, demoLinks)
-  if (response === 'Demo Links added to Database') res.send('OK').status(200)
-  // else res.send(response).status(500)
+  const response = await insertDocuments(client, uid, demoLinks)
+  if (response === 'Demo Links added to Database')
+    res.send(response).status(200)
+  else res.send(response).status(500)
 })
 
 fastify.post('/api/delDemoLinksFromMain', async (req, res) => {
