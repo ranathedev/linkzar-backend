@@ -18,19 +18,6 @@ const fastify = require("fastify")({
 
 fastify.register(require("@fastify/cors"), {})
 
-fastify.register(require("@fastify/view"), {
-  engine: {
-    ejs: require("ejs"),
-  },
-  root: path.join(__dirname, "public"),
-  viewExt: "html",
-  includeViewExtension: true,
-})
-
-fastify.register(require("@fastify/static"), {
-  root: path.join(__dirname, "public"),
-})
-
 const uri = process.env.MONGO_URI
 const client = new MongoClient(uri)
 
