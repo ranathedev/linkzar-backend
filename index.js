@@ -21,8 +21,18 @@ fastify.register(require("@fastify/cors"), {})
 const uri = process.env.MONGO_URI
 const client = new MongoClient(uri)
 
-fastify.get("/", (req, reply) => {
-  reply.send("Linkzar server is running fine.")
+fastify.get("/", async (req, res) => {
+  try {
+    const htmlContent = await fs.promises.readFile(
+      "./public/index.html",
+      "utf8"
+    )
+    res.header("Content-Type", "text/html")
+    res.send(htmlContent)
+  } catch (err) {
+    console.error(err)
+    res.status(500).send("Internal Server Error")
+  }
 })
 
 fastify.post("/api/getLinks", async (req, res) => {
