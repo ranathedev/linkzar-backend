@@ -10,7 +10,7 @@ const {
   deleteLink,
   deleteDemoLinks,
   editLink,
-} = require("./module.js")
+} = require("./module")
 
 const fastify = require("fastify")({
   logger: false,
@@ -18,21 +18,24 @@ const fastify = require("fastify")({
 
 fastify.register(require("@fastify/cors"), {})
 
+fastify.register(require("@fastify/view"), {
+  engine: {
+    ejs: require("ejs"),
+  },
+  root: path.join(__dirname, "public"),
+  viewExt: "html",
+  includeViewExtension: true,
+})
+
+fastify.register(require("@fastify/static"), {
+  root: path.join(__dirname, "public"),
+})
+
 const uri = process.env.MONGO_URI
 const client = new MongoClient(uri)
 
-fastify.get("/", async (req, res) => {
-  try {
-    const htmlContent = await fs.promises.readFile(
-      "./public/index.html",
-      "utf8"
-    )
-    res.header("Content-Type", "text/html")
-    res.send(htmlContent)
-  } catch (err) {
-    console.error(err)
-    res.status(500).send("Internal Server Error")
-  }
+fastify.get("/", (req, reply) => {
+  reply.view("index.html", { ws: "het" })
 })
 
 fastify.post("/api/getLinks", async (req, res) => {
