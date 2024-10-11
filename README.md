@@ -1,2 +1,3 @@
 # linkzar-backend
-This is the Backend Code of Linkzar
+
+This is the Backend Server of Linkzar
