@@ -2,6 +2,7 @@
   "name": "linkzar-backend",
   "version": "1.0.0",
   "license": "MIT",
+  "main": "index.js",
   "engines": {
     "node": "18.x"
   },
