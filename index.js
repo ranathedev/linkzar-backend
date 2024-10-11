@@ -35,7 +35,7 @@ const uri = process.env.MONGO_URI
 const client = new MongoClient(uri)
 
 fastify.get("/", (req, reply) => {
-  reply.view("index.html", { ws: "het" })
+  reply.send("Linkzar server is running fine.")
 })
 
 fastify.post("/api/getLinks", async (req, res) => {
