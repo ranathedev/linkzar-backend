@@ -1,5 +1,4 @@
 const { MongoClient } = require("mongodb")
-const fs = require("fs")
 require("dotenv").config()
 const {
   createCollection,
@@ -10,7 +9,10 @@ const {
   deleteLink,
   deleteDemoLinks,
   editLink,
+  addIndexesForAllCollections,
+  deleteIndexesForCollection,
 } = require("./module")
+const { adminAuth } = require("./middleware")
 
 const fastify = require("fastify")({
   logger: false,
@@ -18,11 +20,30 @@ const fastify = require("fastify")({
 
 fastify.register(require("@fastify/cors"), {})
 
-const uri = process.env.MONGO_URI
-const client = new MongoClient(uri)
+const client = new MongoClient(process.env.MONGO_URI)
 
 fastify.get("/", async (req, res) => {
   res.send("Linkzar Server is working fine...")
+})
+
+fastify.get("/addIndexes", { preHandler: adminAuth }, async (req, res) => {
+  try {
+    await addIndexesForAllCollections(client)
+    res.send("Added Indexes of All Collections")
+  } catch (error) {
+    console.log(error)
+    res.status(500).send("Error Adding Indexes")
+  }
+})
+
+fastify.get("/deleteIndexes", { preHandler: adminAuth }, async (req, res) => {
+  try {
+    await deleteIndexesForCollection(client)
+    res.send("Deleted Indexes of All Collections")
+  } catch (error) {
+    console.log(error)
+    res.status(500).send("Error Deleting Indexes")
+  }
 })
 
 fastify.post("/api/getLinks", async (req, res) => {
@@ -76,64 +97,33 @@ fastify.post("/api/editLink", async (req, res) => {
 
 fastify.get("/:shortId", async (req, res) => {
   const shortId = req.params.shortId
-  try {
-    await client.connect()
-    const database = client.db("linkzar")
-    const userCollections = database.listCollections()
-    while (await userCollections.hasNext()) {
-      const collectionInfo = await userCollections.next()
-      const userCollection = database.collection(collectionInfo.name)
-      const urlData = await userCollection.findOne({ shortId })
-      if (urlData) {
-        await userCollection.updateOne(
-          { _id: urlData._id },
-          { $inc: { clickCounts: 1 } }
+  if (!!shortId) {
+    try {
+      await client.connect()
+      const database = client.db("linkzar")
+      const userCollections = database.listCollections()
+      while (await userCollections.hasNext()) {
+        const collectionInfo = await userCollections.next()
+        const userCollection = database.collection(collectionInfo.name)
+        const urlData = await userCollection.findOneAndUpdate(
+          { shortId },
+          { $inc: { clickCounts: 1 } },
+          { returnDocument: "after", includeResultMetadata: false }
         )
-        const originalURL = urlData.originalURL
-        res.redirect(originalURL)
-        return
+
+        if (urlData) {
+          return res.redirect(urlData.originalURL)
+        }
       }
+      res.status(404).send("URL Data not found")
+    } catch (error) {
+      console.error("Error retrieving URL:", error)
+      res.status(500).send("Internal Server Error")
+    } finally {
+      await client.close()
     }
-    res.status(404).send("URL Data not found")
-  } catch (error) {
-    console.error("Error retrieving URL:", error)
-    res.status(500).send("Internal Server Error")
-  } finally {
-    await client.close()
   }
 })
-
-// fastify.get('/api/findLink', async (req, res) => {
-//   const { id } = req.query
-
-//   try {
-//     await client.connect()
-//     const database = client.db('linkzar')
-
-//     const userCollections = await database.listCollections()
-
-//     while (await userCollections.hasNext()) {
-//       const collectionInfo = await userCollections.next()
-//       const userCollection = database.collection(collectionInfo.name)
-
-//       const shortLink = await userCollection.findOne({
-//         shortId: id,
-//       })
-
-//       if (shortLink) {
-//         console.log({ collection: collectionInfo.name, data: shortLink })
-//       }
-//     }
-
-//     res.send('OK').status(200)
-//   } catch (error) {
-//     console.error('Error creating user collection:', error)
-//     res.send('Error').status(500)
-//   } finally {
-//     await client.close()
-//   }
-//   res.send(response)
-// })
 
 fastify.listen({ port: 3000, host: "0.0.0.0" }, function (err, address) {
   if (err) {
